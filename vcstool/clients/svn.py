@@ -90,6 +90,7 @@ class SvnClient(VcsClientBase):
             entry = root.find('entry')
             url = entry.findtext('url')
             revision = entry.get('revision')
+            revision2 = entry.find('commit').get('revision')
         except Exception as e:
             return {
                 'cmd': '',
@@ -97,6 +98,22 @@ class SvnClient(VcsClientBase):
                 'output': 'Could not determine url from xml: %s' % e,
                 'returncode': 1
             }
+        
+        #check version
+        cmd_info = ["svnversion"]
+        result_info = self._run_command(cmd_info)
+        if result_info['returncode']:
+            result_info['output'] = \
+                'Could not determine url: ' + result_info['output']
+            return result_info
+        svnversionstring = result_info['output']
+        svnversionsplit = svnversionstring.split(":")
+        if (len(svnversionsplit) > 1):
+            revision = str(svnversionsplit[1])
+        elif (revision != revision2):
+            print(revision2)
+            revision = revision2
+
 
         export_data = {'url': url}
         if command.exact:
