@@ -117,6 +117,17 @@ class GitClient(VcsClientBase):
             }
 
         else:
+
+            # determine head
+            cmd_ref = [GitClient._executable, 'status', '-sb']
+            result_ref = self._run_command(cmd_ref)
+            head = False
+            if result_ref['returncode'] == 0:
+                if "origin" in result_ref['output']:
+                    head = True
+                else: 
+                    head = False
+
             # determine the hash
             cmd_ref = [GitClient._executable, 'rev-parse', 'HEAD']
             result_ref = self._run_command(cmd_ref)
@@ -145,6 +156,8 @@ class GitClient(VcsClientBase):
 
             # for each remote name check if the hash is part of the remote
             for remote in remotes:
+
+
                 # get all remote names
                 cmd_refs = [
                     GitClient._executable, 'rev-list', '--remotes=' + remote,
@@ -158,6 +171,7 @@ class GitClient(VcsClientBase):
                 refs = result_refs['output'].splitlines()
                 if ref not in refs:
                     continue
+
 
                 cmds = [result_ref['cmd']]
                 if command.with_tags:
@@ -203,9 +217,25 @@ class GitClient(VcsClientBase):
                     'cwd': self.path,
                     'output': '\n'.join([url, ref]),
                     'returncode': 0,
-                    'export_data': {'url': url, 'version': ref}
+                    'export_data': {'url': url, 'version': ref, 'head': head}
                 }
 
+            #return version when not on rmote
+            for remote in remotes:
+                result_url = self._get_remote_url(remote)
+                if result_url['returncode']:
+                    return result_url
+                url = result_url['output']
+
+                ref = "not remote"
+                return {
+                    'cmd': ' && '.join([result_ref['cmd'], result_remotes['cmd']]),
+                    'cwd': self.path,
+                    'output': "Could not determine remote containing '%s'" % ref,
+                    'returncode': 0,
+                    'export_data': {'url': url, 'version': ref, 'head': False}
+                }
+            
             return {
                 'cmd': ' && '.join([result_ref['cmd'], result_remotes['cmd']]),
                 'cwd': self.path,

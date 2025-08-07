@@ -115,7 +115,7 @@ class SvnClient(VcsClientBase):
             revision = revision2
 
 
-        export_data = {'url': url}
+        export_data = {'url': url, 'head': False}
         if command.exact:
             export_data['version'] = revision
         return {
