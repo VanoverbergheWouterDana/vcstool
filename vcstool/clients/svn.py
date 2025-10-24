@@ -148,6 +148,16 @@ class SvnClient(VcsClientBase):
         cmd_checkout = [
             SvnClient._executable, '--non-interactive', 'checkout', url, '.']
         result_checkout = self._run_command(cmd_checkout, retry=command.retry)
+        
+        #allow switch to other branch
+        if result_checkout['returncode']:
+
+            if ( "E155000" in result_checkout['output']):
+                
+                cmd_checkout = [
+                    SvnClient._executable, '--non-interactive', 'switch', url]
+                result_checkout = self._run_command(cmd_checkout, retry=command.retry)
+
         if result_checkout['returncode']:
             result_checkout['output'] = \
                 "Could not checkout repository '%s': %s" % \
