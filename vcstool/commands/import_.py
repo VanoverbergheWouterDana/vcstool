@@ -24,11 +24,12 @@ class ImportCommand(Command):
     help = 'Import the list of repositories'
 
     def __init__(
-        self, args, url, version=None, recursive=False, shallow=False
+        self, args, url, version=None,branch=None, recursive=False, shallow=False
     ):
         super(ImportCommand, self).__init__(args)
         self.url = url
         self.version = version
+        self.branch = branch
         self.force = args.force
         self.retry = args.retry
         self.skip_existing = args.skip_existing
@@ -107,6 +108,8 @@ def get_repos_in_vcstool_format(repositories):
             repo['url'] = attributes['url']
             if 'version' in attributes:
                 repo['version'] = attributes['version']
+            if 'branch' in attributes:
+                repo['branch'] = attributes['branch']
         except KeyError as e:
             print(
                 ansi('yellowf') + (
@@ -168,9 +171,14 @@ def generate_jobs(repos, args):
             continue
 
         client = clients[0](path)
+        #if branche is empyt set None value
+        branch = str(repo['branch']) if 'branch' in repo else None
+        branch = None if branch == '' else branch
+        
         command = ImportCommand(
             args, repo['url'],
             str(repo['version']) if 'version' in repo else None,
+            branch,
             recursive=args.recursive, shallow=args.shallow)
         job = {'client': client, 'command': command}
         jobs.append(job)

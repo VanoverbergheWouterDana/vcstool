@@ -6,7 +6,7 @@ from vcstool.executor import USE_COLOR
 
 from .vcs_base import VcsClientBase
 from ..util import rmtree
-
+import re
 
 class GitClient(VcsClientBase):
 
@@ -122,9 +122,15 @@ class GitClient(VcsClientBase):
             cmd_ref = [GitClient._executable, 'status', '-sb']
             result_ref = self._run_command(cmd_ref)
             head = False
+            branch = None
             if result_ref['returncode'] == 0:
                 if "origin" in result_ref['output']:
                     head = True
+
+                    match = re.search(r'origin/(\S+)', result_ref['output'])
+                    if match:
+                        branch = match.group(1)
+
                 else: 
                     head = False
 
@@ -217,7 +223,7 @@ class GitClient(VcsClientBase):
                     'cwd': self.path,
                     'output': '\n'.join([url, ref]),
                     'returncode': 0,
-                    'export_data': {'url': url, 'version': ref, 'head': head}
+                    'export_data': {'url': url, 'version': ref, 'head': head, 'branch':branch}
                 }
 
             #return version when not on rmote
@@ -312,6 +318,8 @@ class GitClient(VcsClientBase):
         if not_exist:
             return not_exist
 
+
+        version_name = None
         if GitClient.is_repository(self.path):
             if command.skip_existing:
                 checkout_version = None
@@ -378,6 +386,7 @@ class GitClient(VcsClientBase):
                     version_name = checkout_version[5:]
                     version_type = 'tag'
                 else:
+                    version_name = command.branch
                     version_type = None
             # ensure that a tracking branch exists which can be checked out
             if version_type == 'branch':
@@ -407,18 +416,19 @@ class GitClient(VcsClientBase):
 
         else:
             version_type = None
+            version_name = None
             if command.version:
                 result_version_type, version_name = self._check_version_type(
-                    command.url, command.version)
+                    command.url, command.version, command.branch)
                 if result_version_type['returncode']:
                     return result_version_type
                 version_type = result_version_type['version_type']
 
             if not command.shallow or version_type in (None, 'branch'):
                 cmd_clone = [GitClient._executable, 'clone', command.url, '.']
-                if version_type == 'branch':
+                if version_name != None:
                     cmd_clone += ['-b', version_name]
-                    checkout_version = None
+                    checkout_version = command.version
                 else:
                     checkout_version = command.version
                 if command.shallow:
@@ -468,10 +478,16 @@ class GitClient(VcsClientBase):
                 output = '\n'.join([output, result_fetch['output']])
 
                 checkout_version = command.version
-
+        # function to checkout if hash version was specied
         if checkout_version:
-            cmd_checkout = [
-                GitClient._executable, 'checkout', checkout_version, '--']
+            if version_name != None:
+                #attached version
+                cmd_checkout = [
+                    GitClient._executable, 'checkout', '-B', command.branch, checkout_version, '--']
+            else: 
+                #detached version
+                cmd_checkout = [
+                    GitClient._executable, 'checkout', checkout_version, '--']
             result_checkout = self._run_command(cmd_checkout)
             if result_checkout['returncode']:
                 if self.get_git_version() < [1, 8, 4, 3]:
@@ -527,7 +543,7 @@ class GitClient(VcsClientBase):
             'returncode': 0 if remote_urls else 1
         }
 
-    def _check_version_type(self, url, version):
+    def _check_version_type(self, url, version, branch=None):
         # check if version starts with heads/ or tags/
         prefixes = {
             'heads/': 'branch',
@@ -551,7 +567,9 @@ class GitClient(VcsClientBase):
             return result, None
         if not result['output']:
             result['version_type'] = 'hash'
-            return result, None
+
+            return result, branch #for all iven master checkout without detached head
+
 
         refs = {}
         for hash_, ref in self._get_hash_ref_tuples(result['output']):
