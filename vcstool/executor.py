@@ -202,6 +202,8 @@ class Worker(threading.Thread):
                     'returncode': NotImplemented
                 }
             result = method(job['command'])
+            if ('export' == method_name):
+                print(".",end="")
             result['job'] = job
             return result
         except Exception as e:

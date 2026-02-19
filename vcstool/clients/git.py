@@ -483,7 +483,7 @@ class GitClient(VcsClientBase):
             if version_name != None:
                 #attached version
                 cmd_checkout = [
-                    GitClient._executable, 'checkout', '-B', command.branch, checkout_version, '--']
+                    GitClient._executable, 'checkout', '-B', version_name, checkout_version, '--']
             else: 
                 #detached version
                 cmd_checkout = [
