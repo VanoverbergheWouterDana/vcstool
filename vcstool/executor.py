@@ -125,6 +125,8 @@ def execute_jobs(
                 stdout.write('s')
             elif result['returncode']:
                 stdout.write('E')
+                stdout.write("output '%s'" % result['output'])
+                logger.error("output '%s'" % result['output'])
             else:
                 stdout.write('.')
             if debug_jobs:
