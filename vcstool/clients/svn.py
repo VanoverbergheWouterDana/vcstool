@@ -108,7 +108,7 @@ class SvnClient(VcsClientBase):
             return result_info
         svnversionstring = result_info['output']
         svnversionsplit = svnversionstring.split(":")
-        if (len(svnversionsplit) > 1):
+        if (len(svnversionsplit) > 1 and not('MS' in str(svnversionsplit[1])) ):
             revision = str(svnversionsplit[1])
         elif (revision != revision2):
             print(revision2)
@@ -142,8 +142,10 @@ class SvnClient(VcsClientBase):
         self._check_executable()
 
         url = command.url
+        checkout_version = ''
         if command.version:
             url += '@%s' % command.version
+            checkout_version = command.version
 
         cmd_checkout = [
             SvnClient._executable, '--non-interactive', 'checkout', url, '.']
@@ -170,7 +172,7 @@ class SvnClient(VcsClientBase):
             'output': result_checkout['output'],
             'returncode': 0,
             'url': command.url,
-            'version_name':  version_name, 
+            'version_name':  '', 
             'checkout_version' : checkout_version,
         }
 
