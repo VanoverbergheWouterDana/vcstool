@@ -168,7 +168,10 @@ class SvnClient(VcsClientBase):
             'cmd': ' '.join(cmd_checkout),
             'cwd': self.path,
             'output': result_checkout['output'],
-            'returncode': 0
+            'returncode': 0,
+            'url': command.url,
+            'version_name':  version_name, 
+            'checkout_version' : checkout_version,
         }
 
     def log(self, command):

@@ -7,6 +7,7 @@ from vcstool.executor import USE_COLOR
 from .vcs_base import VcsClientBase
 from ..util import rmtree
 import re
+from packaging.version import Version
 
 class GitClient(VcsClientBase):
 
@@ -207,7 +208,7 @@ class GitClient(VcsClientBase):
                             return result_ls_remote
                         matches = self._get_hash_ref_tuples(
                             result_ls_remote['output'])
-                        if len(matches) == 1 and matches[0][0] == ref:
+                        if len(matches) == 1:
                             ref = tag
 
                 # determine url of remote
@@ -258,6 +259,89 @@ class GitClient(VcsClientBase):
                 result_url['output']
         return result_url
 
+
+
+
+    # ---------- VERSION FILTERING ----------
+
+    def __match_exact(self, tags, version):
+        return [t for t in tags if t == version]
+
+    def __match_caret(self, tags, base_version):
+        base = Version(base_version)
+
+        if base.major == 0:
+            upper = Version(f"0.{base.minor + 1}.0")
+        else:
+            upper = Version(f"{base.major + 1}.0.0")
+
+        return [
+            t for t in tags
+            if Version(t) >= base and Version(t) < upper
+        ]
+
+
+    def __match_range(self, tags, range_expr):
+        conditions = []
+
+        parts = range_expr.split()
+        for part in parts:
+            if part.startswith(">="):
+                v = Version(part[2:])
+                conditions.append(lambda x, v=v: Version(x) >= v)
+            elif part.startswith(">"):
+                v = Version(part[1:])
+                conditions.append(lambda x, v=v: Version(x) > v)
+            elif part.startswith("<="):
+                v = Version(part[2:])
+                conditions.append(lambda x, v=v: Version(x) <= v)
+            elif part.startswith("<"):
+                v = Version(part[1:])
+                conditions.append(lambda x, v=v: Version(x) < v)
+
+        return [
+            t for t in tags
+            if all(cond(t) for cond in conditions)
+        ]
+
+
+    # ---------- Filter versions ----------  
+    def __filter_versions(self, expr):
+        if not(expr.startswith("^")) and not( any(op in expr for op in [">", "<"]) ) :
+            #exact version
+            return expr
+        
+        # get list of remote tags
+        cmd_remotetags = [
+            GitClient._executable, 'ls-remote', '--tags', 'origin']
+        result_remotetags = self._run_command(cmd_remotetags)
+        if (result_remotetags["returncode"]):
+            print(result_remotetags)
+            return
+        tags = []
+        for line in result_remotetags["output"].splitlines():
+            tag = line.split("/")[-1]
+            if tag.endswith("^{}"):  # skip annotated duplicates
+                continue
+            tags.append(tag)
+
+
+        # Keep only valid semver (optional but safe)
+        tags = [t for t in tags if re.match(r'^\d+\.\d+\.\d+$', t)]
+
+        if expr.startswith("^"):
+            result = self.__match_caret(tags, expr[1:])
+        #elif any(op in expr for op in [">", "<"]):
+        # first if already did this
+        else:
+            result = self.__match_range(tags, expr)
+
+        result.sort(key=Version)
+        #get current last version
+        return result[-1]
+
+
+    # ---------- main import function ----------  
     def import_(self, command):
         if not command.url:
             return {
@@ -478,9 +562,17 @@ class GitClient(VcsClientBase):
                 output = '\n'.join([output, result_fetch['output']])
 
                 checkout_version = command.version
+
+
+        # check for tag verion in range
+        # ^0.1.0
+        if checkout_version:
+            checkout_version = self.__filter_versions(checkout_version)
+
+
         # function to checkout if hash version was specied
         if checkout_version:
-            if version_name != None:
+            if version_name != None and not(version_type == "tag"):
                 #attached version
                 cmd_checkout = [
                     GitClient._executable, 'checkout', '-B', version_name, checkout_version, '--']
@@ -518,7 +610,10 @@ class GitClient(VcsClientBase):
             'cmd': cmd,
             'cwd': self.path,
             'output': output,
-            'returncode': 0
+            'returncode': 0,
+            'url': command.url,
+            'version_name':  version_name, 
+            'checkout_version' : checkout_version,
         }
 
     def _get_remote_urls(self):
