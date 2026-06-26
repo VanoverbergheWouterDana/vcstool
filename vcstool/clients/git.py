@@ -325,9 +325,46 @@ class GitClient(VcsClientBase):
                 continue
             tags.append(tag)
 
+        tag_dict = {}
+        for line in result_remotetags["output"].splitlines():
+            tag = line.split("/")[-1]
 
-        # Keep only valid semver (optional but safe)
-        tags = [t for t in tags if re.match(r'^\d+\.\d+\.\d+$', t)]
+            if tag.endswith("^{}"):
+                continue
+
+            # ✔ Valid
+
+            # 0.1.0
+            # 00.01.000
+            # 1.002.00003
+            # RAPID_00.01.00
+            # BUILD_001.002.003
+            # ANYTHING_123.456.789
+
+            # ❌ Rejected
+
+            # 1.2 → not 3 numbers
+            # 1.2.3.4 → too many segments
+            # RAPID_1.2 → not 3 numbers
+            # RAPID_1.2.3.4 → too many
+
+            # ✅ keep only valid tags
+            if not re.match(r'^(?:[A-Za-z0-9_]+_)?\d+\.\d+\.\d+$', tag):
+                continue
+
+            # ✅ normalize (remove prefix)
+            if "_" in tag:
+                _, version = tag.rsplit("_", 1)
+            else:
+                version = tag
+
+            # normalize each number part
+            parts = version.split(".")
+            normalized = ".".join(str(int(p)) for p in parts)
+
+            tag_dict[normalized] = tag
+
+        tags = list(tag_dict.keys())
 
         if expr.startswith("^"):
             result = self.__match_caret(tags, expr[1:])
@@ -336,9 +373,12 @@ class GitClient(VcsClientBase):
         else:
             result = self.__match_range(tags, expr)
 
+        if len(result) == 0:
+            return expr
+        
         result.sort(key=Version)
         #get current last version
-        return result[-1]
+        return tag_dict[result[-1]]
 
 
     # ---------- main import function ----------  
